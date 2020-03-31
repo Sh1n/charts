@@ -1,8 +1,11 @@
-# Laravel Helm Chart
-This is my personal implementation of a Helm Chart for deploying Laravel in Kubernetes.
+# A Collection of Helm Charts
+This is my personal collection of Helm Charts used across multiple projects.
 
-The architecture costs of three deployments:
-- App Component: a pod containing a reverse proxy made with NGINX proxying the PHP-FPM container containing the actual code.
-- Queue Component
-- Scheduler Component
+## TL;DR
+```bash
+$ helm repo add shin https://raw.githubusercontent.com/Sh1n/charts/master/packages/
+helm repo update
+helm install <releasename> shin/<chart>
+```
 
+## PROFIT
