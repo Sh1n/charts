@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  {{- with .Values.namespace }}
+  namespace: {{ .Values.namespace }}
+  {{- end }}
+  name: {{ include "laravelChart.fullname" . }}-app
+  labels:
+{{ include "laravelChart.labels" . | indent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "laravelChart.name" . }}-app
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "laravelChart.name" . }}-app
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      volumes:
+        - name: source-code
+          emptyDir: {}
+        - name: reverse-proxy-vhost
+          configMap:
+            name: {{ .Values.reverseProxyImage.configName }}
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      serviceAccountName: {{ template "laravelChart.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: reverse-proxy
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.reverseProxyImage.repository }}:{{ .Values.reverseProxyImage.tag }}"
+          imagePullPolicy: {{ .Values.reverseProxyImage.pullPolicy }}
+          volumeMounts:
+            - name: {{ .Values.reverseProxyImage.configName }}
+              mountPath: /etc/nginx/nginx.conf
+              subPath: laravello.conf
+            - name: source-code
+              mountPath: /laravel
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.appImage.repository }}:{{ .Values.appImage.tag }}"
+          imagePullPolicy: {{ .Values.appImage.pullPolicy }}
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - "sh"
+                  - "-c"
+                  - >
+                    cp -rp /var/www/laravel/. /laravel &&
+                    chmod -R 777 /laravel/storage &&
+                    chown -R www-data:www-data /var/www/laravel
+          volumeMounts:
+            - name: source-code
+              mountPath: /laravel
+          {{- with .Values.appImage.configName }}
+          envFrom:
+            - configMapRef:
+                name: {{ .Values.appImage.configName }}
+          {{- end}}
+          env:
+            - name: CONTAINER_ROLE
+              value: "app"
+
+      resources:
+        {{- toYaml .Values.resources | nindent 12 }}
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+    {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
